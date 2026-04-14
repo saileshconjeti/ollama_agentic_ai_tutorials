@@ -2,7 +2,35 @@
 ------------------------------------------------------------
 Tutorial 4: Web Search Agent with a Local Model
 Author: Dr. Sailesh Conjeti
+Course: Generative and Agentic AI: Foundations, Frameworks and Applications
 ------------------------------------------------------------
+Purpose:
+Show how a local model can use an external web-search tool to answer
+questions with fresher, more grounded information.
+
+What Students Will Learn:
+- How to wrap search as a LangChain tool
+- How the model requests tool calls at runtime
+- How tool outputs are returned back to the model for final synthesis
+
+Prerequisites:
+- Ollama installed and running locally
+- Model pulled: llama3.1:8b
+- Python environment with project requirements installed
+- Internet access (required for web search)
+
+How to Run:
+python 04_web_search_agent.py
+
+Expected Behavior / Output:
+- Prints initial model message
+- Shows requested tool calls
+- Displays search summaries and final answer
+
+Key Concepts Covered:
+- Tool-augmented answering with current information
+- Model/tool handoff and result feedback loop
+- Practical grounding beyond model-only memory
 """
 
 from ddgs import DDGS
@@ -11,9 +39,17 @@ from langchain_core.messages import HumanMessage, ToolMessage
 from langchain_ollama import ChatOllama
 
 
+# ------------------------------------------------------------
+# Tool Definition
+# ------------------------------------------------------------
 @tool
 def web_search(query: str) -> str:
-    """Search the web and return top result summaries."""
+    """
+    Search the web and return a readable text summary of top results.
+
+    The returned string is passed back to the model as tool output,
+    allowing the model to build a final response from retrieved evidence.
+    """
     results_text = []
 
     try:
@@ -37,6 +73,9 @@ def web_search(query: str) -> str:
     return "\n\n".join(results_text)
 
 
+# ------------------------------------------------------------
+# Tool Registry + Model Setup
+# ------------------------------------------------------------
 TOOLS = [web_search]
 TOOL_MAP = {tool_.name: tool_ for tool_ in TOOLS}
 
@@ -46,7 +85,15 @@ llm = ChatOllama(
 ).bind_tools(TOOLS)
 
 
+# ------------------------------------------------------------
+# Agent Runner
+# ------------------------------------------------------------
 def answer_question(question: str) -> None:
+    """
+    Run one question through model -> tool (optional) -> model flow.
+
+    This is a single-round tool-calling pattern, not a looping agent graph.
+    """
     messages = [HumanMessage(content=question)]
     ai_msg = llm.invoke(messages)
     messages.append(ai_msg)
@@ -63,6 +110,7 @@ def answer_question(question: str) -> None:
         print(ai_msg.content)
         return
 
+    # Execute requested tools and return observations to the model.
     for call in ai_msg.tool_calls:
         result = TOOL_MAP[call["name"]].invoke(call["args"])
         print("\n=== Tool Result ===")
@@ -76,6 +124,9 @@ def answer_question(question: str) -> None:
     print(final_answer.content)
 
 
+# ------------------------------------------------------------
+# Script Entry Point
+# ------------------------------------------------------------
 if __name__ == "__main__":
     question = "Find recent developments in agentic AI security and summarize them for students."
     answer_question(question)
